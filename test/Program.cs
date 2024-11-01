@@ -34,7 +34,7 @@ namespace ExcelMerger
 
             int currentRow = 1;  // Счетчик для строк в листе "Summary"
             HashSet<string> uniqueWallets = new HashSet<string>();
-            HashSet<string> addedSheets = new HashSet<string>(); // Для отслеживания уникальных листов кошельков
+            Dictionary<string, string> sheetNameMap = new Dictionary<string, string>(); // Оригинальные имена и фактические имена листов
 
             // Сначала копируем все листы, кроме "Summary"
             foreach (string file in inputFiles)
@@ -44,14 +44,33 @@ namespace ExcelMerger
                 for (int i = 1; i <= workbook.Worksheets.Count; i++)
                 {
                     Worksheet sheet = (Worksheet)workbook.Worksheets[i];
-                    if (sheet.Name != "Summary" && !addedSheets.Contains(sheet.Name))
+                    string originalSheetName = sheet.Name;
+
+                    if (originalSheetName != "Summary" && !sheetNameMap.ContainsKey(originalSheetName))
                     {
+                        // Копируем лист в выходной файл
                         sheet.Copy(After: outputWorkbook.Sheets[outputWorkbook.Sheets.Count]);
-                        addedSheets.Add(sheet.Name); // Добавляем имя листа в список добавленных листов
+
+                        // Получаем фактическое имя листа после копирования
+                        Worksheet copiedSheet = (Worksheet)outputWorkbook.Sheets[outputWorkbook.Sheets.Count];
+                        string actualSheetName = copiedSheet.Name;
+
+                        // Добавляем в словарь для сопоставления оригинального имени с фактическим именем
+                        sheetNameMap[originalSheetName] = actualSheetName;
+
+                        // Выводим отладочное сообщение
+                        Console.WriteLine($"Скопирован лист: Оригинальное имя = '{originalSheetName}', Фактическое имя = '{actualSheetName}'");
                     }
                 }
 
                 workbook.Close(false);  // Закрываем исходный файл без сохранения изменений
+            }
+
+            // Вывод всех листов в итоговом файле для отладки
+            Console.WriteLine("Список всех листов в итоговом файле:");
+            foreach (Worksheet ws in outputWorkbook.Worksheets)
+            {
+                Console.WriteLine($"Лист: {ws.Name}");
             }
 
             // Затем обрабатываем листы "Summary" и добавляем ссылки
@@ -91,13 +110,11 @@ namespace ExcelMerger
                             {
                                 try
                                 {
-                                    // Пробуем создать ссылку на лист с именем Wallet_<имя_кошелька>
-                                    string sheetName = $"Wallet_{wallet}";
-
-                                    // Проверяем, существует ли лист с таким именем
-                                    if (outputWorkbook.Worksheets.Cast<Worksheet>().Any(s => s.Name == sheetName))
+                                    // Проверяем, существует ли фактическое имя листа для этого кошелька
+                                    string originalSheetName = $"Wallet_{wallet}";
+                                    if (sheetNameMap.TryGetValue(originalSheetName, out string actualSheetName))
                                     {
-                                        string subAddress = $"'{sheetName}'!A1"; // Убедитесь, что кавычки обрамляют имя листа
+                                        string subAddress = $"'{actualSheetName}'!A1"; // Используем фактическое имя листа
 
                                         targetCell.Hyperlinks.Add(
                                             Anchor: targetCell,
@@ -108,7 +125,7 @@ namespace ExcelMerger
                                     }
                                     else
                                     {
-                                        Console.WriteLine($"Лист с именем '{sheetName}' не найден в итоговом файле.");
+                                        Console.WriteLine($"Лист с именем '{originalSheetName}' не найден в итоговом файле.");
                                     }
                                 }
                                 catch (Exception ex)
